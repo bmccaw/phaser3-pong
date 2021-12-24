@@ -1,16 +1,26 @@
 import Phaser from 'phaser'
 
 import WebFontFile from './WebFontFile'
-import { GameBackground } from '../consts/SceneKeys'
+import { GameBackground, GameOver } from '../consts/SceneKeys'
 import { White } from '../consts/Colors'
+import { PressStart2P } from '../consts/Fonts'
+
+const GameState = {
+    Running: 'running',
+    PlayerWon: 'player-won',
+    AIWon: 'ai-won'
+}
 
 export default class Game extends Phaser.Scene {
 
     init () {
+    this.gameState= GameState.Running
     this.paddleRightVelocity = new Phaser.Math.Vector2(0, 0)
     
     this.leftScore = 0
     this.rightScore = 0
+
+    this.paused = false
     }
 
     preload()
@@ -28,11 +38,10 @@ export default class Game extends Phaser.Scene {
         this.physics.world.setBounds(-100, 0, 1000, 500)
         this.ball = this.add.circle(400, 250, 10, White, 1)
         this.physics.add.existing(this.ball)
+        this.ball.body.setCircle(10)
         this.ball.body.setBounce(1, 1)
 
         this.ball.body.setCollideWorldBounds(true, 1, 1)
-
-        this.resetBall()
 
         this.paddleLeft = this.add.rectangle(50, 250, 30, 100, White, 1)
         this.physics.add.existing(this.paddleLeft, true)
@@ -46,15 +55,23 @@ export default class Game extends Phaser.Scene {
 
         this.physics.add.collider(this.paddleRight, this.ball)
 
-        const scoreStyle = {fontSize: 48, fontFamily: '"Press Start 2P"'}
+        const scoreStyle = {fontSize: 48, fontFamily: PressStart2P}
 
         this.leftScoreLabel = this.add.text(300, 125, '0', scoreStyle).setOrigin(.5, .5)
 
         this.rightScoreLabel = this.add.text(500, 125, '0', scoreStyle).setOrigin(.5, .5)
 
+        this.time.delayedCall(1500, () => {
+            this.resetBall()
+        })
+
     }
 
     update() {
+
+        if (this.paused || this.gameState !== GameState.Running) {
+            return
+        }
 
         this.processPlayerInput()
         this.updateAi()
@@ -101,14 +118,42 @@ export default class Game extends Phaser.Scene {
     }
 
     checkScore() {
-        if (this.ball.x < -30) {
+
+        const x = this.ball.x
+        const leftBounds = -30
+        const rightBounds = 830
+
+        if (x >= leftBounds && x<= rightBounds) {
+            return
+        }
+
+        if (this.ball.x < leftBounds) {
             //scored for left side
             this.incrementRightScore()
-            this.resetBall()
-        } else if ( this.ball.x > 830) {
+        } else if ( this.ball.x > rightBounds) {
             //scored on right side
             this.incrementLeftScore()
+        }
+
+        const maxScore = 7
+        if (this.rightScore >= maxScore) {
+            //player won
+            this.gameState = GameState.PlayerWon
+        } else if (this.leftScore >= maxScore) {
+            //ai won
+            this.gameState = GameState.AIWon
+        }
+
+        if (this.gameState === GameState.Running) {
             this.resetBall()
+        } else {
+            this.physics.world.remove(this.ball.body)
+            this.scene.stop(GameBackground)
+            //show game over screen
+            this.scene.start(GameOver, {
+                leftScore: this.leftScore,
+                rightScore: this.rightScore
+            })
         }
     }
 
@@ -125,7 +170,7 @@ export default class Game extends Phaser.Scene {
     resetBall() {
         this.ball.setPosition(400, 250)
         const angle = Phaser.Math.Between(0, 360)
-        const vec = this.physics.velocityFromAngle(angle, 300)
+        const vec = this.physics.velocityFromAngle(angle, 500)
         this.ball.body.setVelocity(vec.x, vec.y)
     }
 }
